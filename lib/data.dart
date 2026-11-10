@@ -6,15 +6,28 @@ const sampleVideoUrl =
 
 enum UnitStatus { done, inProgress, todo }
 
+/// One lecture inside a unit. It can have a video, a PDF, or both.
+/// A PDF-only item (notes, formula sheet) has hasVideo = false.
+class Lecture {
+  final String title;
+  final bool hasVideo;
+  final bool hasPdf;
+
+  /// Free lectures play in Demo Mode. The Telegram bot will toggle this later.
+  final bool free;
+  const Lecture(this.title,
+      {this.hasVideo = true, this.hasPdf = false, this.free = false});
+}
+
 class UnitItem {
   final String title;
-  final int videos;
-  final int pdfs;
   final UnitStatus status;
+  final List<Lecture> lectures;
+  const UnitItem(this.title, this.status, this.lectures);
 
-  /// Free units are playable in Demo Mode. The Telegram bot will toggle this later.
-  final bool free;
-  const UnitItem(this.title, this.videos, this.pdfs, this.status, {this.free = false});
+  int get videos => lectures.where((l) => l.hasVideo).length;
+  int get pdfs => lectures.where((l) => l.hasPdf).length;
+  int get freeCount => lectures.where((l) => l.free).length;
 }
 
 class Subject {
@@ -37,35 +50,50 @@ class Batch {
   int get lectures => subjects.fold(0, (sum, s) => sum + s.lectures);
 }
 
+/// Builds sample lectures: [videos] video lectures (the first [withPdf] also
+/// have a PDF), the first [free] are free, plus [onlyPdf] PDF-only items.
+List<Lecture> _make(int videos, {int withPdf = 0, int onlyPdf = 0, int free = 0}) {
+  return [
+    for (var i = 1; i <= videos; i++)
+      Lecture('Lecture $i', hasVideo: true, hasPdf: i <= withPdf, free: i <= free),
+    for (var i = 1; i <= onlyPdf; i++)
+      Lecture(i == 1 ? 'Formula Sheet' : 'Practice Sheet $i',
+          hasVideo: false, hasPdf: true),
+  ];
+}
+
 // Sample content. The Telegram bot will replace this with real data.
-const sampleBatches = <Batch>[
-  Batch('Class 12 Science', Icons.menu_book_rounded, Color(0xFF5B5BFF), [
-    Subject('Physics', Icons.bolt_rounded, Color(0xFF5B5BFF), [
-      UnitItem('Units and Measurement', 3, 2, UnitStatus.done, free: true),
-      UnitItem('Laws of Motion', 4, 3, UnitStatus.inProgress),
-      UnitItem('Work, Energy and Power', 3, 2, UnitStatus.todo),
-      UnitItem('Rotational Motion', 3, 2, UnitStatus.todo),
+final sampleBatches = <Batch>[
+  Batch('Class 12 Science', Icons.menu_book_rounded, const Color(0xFF5B5BFF), [
+    Subject('Physics', Icons.bolt_rounded, const Color(0xFF5B5BFF), [
+      UnitItem('Units and Measurement', UnitStatus.done,
+          _make(3, withPdf: 2, onlyPdf: 1, free: 1)),
+      UnitItem('Laws of Motion', UnitStatus.inProgress,
+          _make(4, withPdf: 3, onlyPdf: 2)),
+      UnitItem('Work, Energy and Power', UnitStatus.todo,
+          _make(3, withPdf: 2, onlyPdf: 1)),
+      UnitItem('Rotational Motion', UnitStatus.todo, _make(3, withPdf: 2)),
     ]),
-    Subject('Chemistry', Icons.science_rounded, Color(0xFF19C3B1), [
-      UnitItem('Atomic Structure', 3, 2, UnitStatus.todo),
-      UnitItem('Chemical Bonding', 4, 2, UnitStatus.todo),
-      UnitItem('Thermodynamics', 3, 2, UnitStatus.todo),
+    Subject('Chemistry', Icons.science_rounded, const Color(0xFF19C3B1), [
+      UnitItem('Atomic Structure', UnitStatus.todo, _make(3, withPdf: 2)),
+      UnitItem('Chemical Bonding', UnitStatus.todo, _make(4, withPdf: 2)),
+      UnitItem('Thermodynamics', UnitStatus.todo, _make(3, withPdf: 2)),
     ]),
-    Subject('Mathematics', Icons.calculate_rounded, Color(0xFFFF6AA2), [
-      UnitItem('Relations and Functions', 2, 1, UnitStatus.todo),
-      UnitItem('Calculus', 5, 3, UnitStatus.todo),
+    Subject('Mathematics', Icons.calculate_rounded, const Color(0xFFFF6AA2), [
+      UnitItem('Relations and Functions', UnitStatus.todo, _make(2, withPdf: 1)),
+      UnitItem('Calculus', UnitStatus.todo, _make(5, withPdf: 3, onlyPdf: 1)),
     ]),
-    Subject('Biology', Icons.eco_rounded, Color(0xFFFFB84D), [
-      UnitItem('The Living World', 3, 2, UnitStatus.todo),
-      UnitItem('Genetics', 4, 3, UnitStatus.todo),
+    Subject('Biology', Icons.eco_rounded, const Color(0xFFFFB84D), [
+      UnitItem('The Living World', UnitStatus.todo, _make(3, withPdf: 2)),
+      UnitItem('Genetics', UnitStatus.todo, _make(4, withPdf: 3)),
     ]),
   ]),
-  Batch('Revision Crash Course', Icons.bolt_rounded, Color(0xFF19C3B1), [
-    Subject('Physics Revision', Icons.bolt_rounded, Color(0xFF5B5BFF), [
-      UnitItem('Mechanics in One Shot', 2, 1, UnitStatus.todo),
+  Batch('Revision Crash Course', Icons.bolt_rounded, const Color(0xFF19C3B1), [
+    Subject('Physics Revision', Icons.bolt_rounded, const Color(0xFF5B5BFF), [
+      UnitItem('Mechanics in One Shot', UnitStatus.todo, _make(2, withPdf: 1)),
     ]),
-    Subject('Chemistry Revision', Icons.science_rounded, Color(0xFF19C3B1), [
-      UnitItem('Organic in One Shot', 2, 1, UnitStatus.todo),
+    Subject('Chemistry Revision', Icons.science_rounded, const Color(0xFF19C3B1), [
+      UnitItem('Organic in One Shot', UnitStatus.todo, _make(2, withPdf: 1)),
     ]),
   ]),
 ];
