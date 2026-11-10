@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../access.dart';
 import '../data.dart';
 import '../device_id.dart';
 import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'key_screen.dart';
 import 'player_screen.dart';
 import 'subjects_screen.dart';
 
@@ -153,7 +155,7 @@ class _HomeTab extends StatelessWidget {
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(color: p.glassBorder),
               ),
-              child: const Text('PREMIUM',
+              child: Text(isDemo ? 'DEMO' : 'PREMIUM',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1)),
             ),
           ],
@@ -172,6 +174,7 @@ class _HomeTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
+        if (!isDemo) ...[
         const Text('Continue watching',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
@@ -231,6 +234,40 @@ class _HomeTab extends StatelessWidget {
             ],
           ),
         ),
+        ],
+        if (isDemo) ...[
+          GlassCard(
+            radius: 22,
+            padding: const EdgeInsets.all(16),
+            gradient: const LinearGradient(
+              colors: [Color(0x595B5BFF), Color(0x2E19C3B1)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const KeyScreen()),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_open_rounded),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('You are in Demo Mode',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text('Only free lectures are unlocked. Tap to enter your premium key.',
+                          style: TextStyle(fontSize: 12, height: 1.4, color: p.textDim)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 24),
         const Text('Your batches',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),

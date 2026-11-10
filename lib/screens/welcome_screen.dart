@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../access.dart';
 import '../glass.dart';
 import '../theme.dart';
 import 'key_screen.dart';
-import 'player_screen.dart';
+import 'home_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
@@ -54,18 +55,16 @@ class WelcomeScreen extends StatelessWidget {
               const SizedBox(height: 36),
               _OptionCard(
                 icon: Icons.ondemand_video_rounded,
-                title: 'Demo Video',
-                subtitle: 'Watch a free sample, no key needed',
-                badge: 'FREE',
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const PlayerScreen(
-                      title: 'Demo Lecture',
-                      subtitle: 'Free sample',
-                    ),
-                  ),
-                ),
+                title: 'Demo Mode',
+                subtitle: 'Browse everything. Only free lectures play.',
+                badge: 'DEMO',
+                onTap: () {
+                  accessMode.value = AccessMode.demo;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  );
+                },
               ),
               const SizedBox(height: 16),
               _OptionCard(

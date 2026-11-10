@@ -11,7 +11,10 @@ class UnitItem {
   final int videos;
   final int pdfs;
   final UnitStatus status;
-  const UnitItem(this.title, this.videos, this.pdfs, this.status);
+
+  /// Free units are playable in Demo Mode. The Telegram bot will toggle this later.
+  final bool free;
+  const UnitItem(this.title, this.videos, this.pdfs, this.status, {this.free = false});
 }
 
 class Subject {
@@ -38,7 +41,7 @@ class Batch {
 const sampleBatches = <Batch>[
   Batch('Class 12 Science', Icons.menu_book_rounded, Color(0xFF5B5BFF), [
     Subject('Physics', Icons.bolt_rounded, Color(0xFF5B5BFF), [
-      UnitItem('Units and Measurement', 3, 2, UnitStatus.done),
+      UnitItem('Units and Measurement', 3, 2, UnitStatus.done, free: true),
       UnitItem('Laws of Motion', 4, 3, UnitStatus.inProgress),
       UnitItem('Work, Energy and Power', 3, 2, UnitStatus.todo),
       UnitItem('Rotational Motion', 3, 2, UnitStatus.todo),

@@ -50,6 +50,11 @@ ThemeData buildTheme(Brightness brightness) {
   final base = ThemeData(brightness: brightness, useMaterial3: true);
   return base.copyWith(
     scaffoldBackgroundColor: p.bg,
+    // Smooth iOS-style slide between screens, with swipe-back on Android too.
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    }),
     textTheme: GoogleFonts.interTextTheme(base.textTheme)
         .apply(bodyColor: p.text, displayColor: p.text),
   );

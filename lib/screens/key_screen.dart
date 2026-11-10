@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../access.dart';
 import '../device_id.dart';
 import '../glass.dart';
 import '../theme.dart';
@@ -29,7 +30,8 @@ class _KeyScreenState extends State<KeyScreen> {
       _toast('Please enter your premium key.');
       return;
     }
-    // DEV ONLY: any non-empty key opens Home so you can test the screens.
+    // DEV ONLY: any non-empty key unlocks premium so you can test the screens.
+    accessMode.value = AccessMode.premium;
     // TODO(next step): send key + device ID to the server and unlock only on success.
     Navigator.pushAndRemoveUntil(
       context,

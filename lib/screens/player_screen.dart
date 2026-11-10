@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
 import '../data.dart';
@@ -51,6 +52,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    // Always leave the player in normal portrait mode with system bars back.
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _hideTimer?.cancel();
     _flashTimer?.cancel();
     _c.dispose();
@@ -91,8 +95,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _scheduleHide();
   }
 
+  /// Switch between vertical (portrait) and horizontal (fullscreen) playback.
+  Future<void> _setFullscreen(bool full) async {
+    if (full) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+    if (mounted) {
+      setState(() => _showControls = true);
+      _scheduleHide();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final landscape = MediaQuery.orientationOf(context) == Orientation.landscape;
+
+    // Horizontal: the video fills the whole screen. Back press exits fullscreen first.
+    if (landscape) {
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _setFullscreen(false);
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: _buildVideo(context),
+        ),
+      );
+    }
+
     final p = AppPalette.of(context);
     return Scaffold(
       body: GlassBackground(
@@ -211,6 +249,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     )
                   : const CircularProgressIndicator(),
             ),
+            if (_c.value.isInitialized && _c.value.isBuffering)
+              const Center(child: CircularProgressIndicator(strokeWidth: 3)),
             Center(
               child: AnimatedOpacity(
                 opacity: _flash == null ? 0 : 1,
@@ -330,6 +370,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 const SizedBox(width: 10),
                 Text(_fmt(_c.value.duration),
                     style: const TextStyle(color: Colors.white, fontSize: 11)),
+                const SizedBox(width: 4),
+                IconButton(
+                  tooltip: MediaQuery.orientationOf(context) == Orientation.landscape
+                      ? 'Exit fullscreen'
+                      : 'Fullscreen (horizontal)',
+                  color: Colors.white,
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(MediaQuery.orientationOf(context) == Orientation.landscape
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded),
+                  onPressed: () => _setFullscreen(
+                      MediaQuery.orientationOf(context) != Orientation.landscape),
+                ),
               ],
             ),
           ),

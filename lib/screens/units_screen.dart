@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../access.dart';
 import '../data.dart';
 import '../glass.dart';
 import '../theme.dart';
@@ -53,6 +54,7 @@ class _UnitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inProgress = unit.status == UnitStatus.inProgress;
+    final locked = isDemo && !unit.free;
     final statusText = switch (unit.status) {
       UnitStatus.done => 'DONE',
       UnitStatus.inProgress => 'IN PROGRESS',
@@ -90,7 +92,14 @@ class _UnitCard extends StatelessWidget {
                 child: Text(unit.title,
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               ),
-              if (statusText.isNotEmpty)
+              if (isDemo && unit.free)
+                const Text('FREE',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF19C3B1))),
+              if (locked) const Icon(Icons.lock_rounded, size: 18),
+              if (!isDemo && statusText.isNotEmpty)
                 Text(statusText,
                     style: TextStyle(
                         fontSize: 11,
@@ -107,6 +116,7 @@ class _UnitCard extends StatelessWidget {
                 child: _Chip(
                   icon: Icons.play_circle_outline_rounded,
                   label: '${unit.videos} Videos',
+                  locked: locked,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -124,6 +134,7 @@ class _UnitCard extends StatelessWidget {
                   icon: Icons.picture_as_pdf_outlined,
                   iconColor: const Color(0xFFFF9CC3),
                   label: '${unit.pdfs} PDFs',
+                  locked: locked,
                   onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('PDF viewer is coming in the next step.')),
                   ),
@@ -142,14 +153,21 @@ class _Chip extends StatelessWidget {
   final Color? iconColor;
   final String label;
   final VoidCallback onTap;
-  const _Chip({required this.icon, required this.label, required this.onTap, this.iconColor});
+  final bool locked;
+  const _Chip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor,
+    this.locked = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
+      onTap: locked ? () => showPremiumRequired(context) : onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -159,7 +177,8 @@ class _Chip extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: iconColor),
+            Icon(locked ? Icons.lock_rounded : icon,
+                size: 18, color: locked ? null : iconColor),
             const SizedBox(width: 8),
             Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           ],
