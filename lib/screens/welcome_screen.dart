@@ -4,6 +4,8 @@ import '../access.dart';
 import '../glass.dart';
 import '../theme.dart';
 import 'key_screen.dart';
+import '../secret_tap.dart';
+import 'admin/admin_login_screen.dart';
 import 'home_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -36,10 +38,20 @@ class WelcomeScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 28),
-              GlassCard(
-                padding: const EdgeInsets.all(16),
-                radius: 20,
-                child: const Icon(Icons.play_arrow_rounded, size: 28),
+              // Tap the logo 7 times quickly to open the hidden admin login.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: SecretTap(
+                  onUnlocked: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                  ),
+                  child: GlassCard(
+                    padding: const EdgeInsets.all(16),
+                    radius: 20,
+                    child: const Icon(Icons.play_arrow_rounded, size: 28),
+                  ),
+                ),
               ),
               const SizedBox(height: 16),
               Text('Itachi Universe',
