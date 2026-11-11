@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../access.dart';
+import '../api.dart';
 import '../catalog.dart';
 import '../data.dart';
 import '../device_id.dart';
@@ -10,6 +11,7 @@ import '../widgets.dart';
 import 'key_screen.dart';
 import 'player_screen.dart';
 import 'subjects_screen.dart';
+import 'welcome_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -310,6 +312,30 @@ class _LibraryTab extends StatelessWidget {
 class _SettingsTab extends StatelessWidget {
   const _SettingsTab();
 
+  Future<void> _logout(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text(
+            'This removes premium from this phone. Your key stays valid, so you can enter it again on this device.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Log out')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await Api.clearPremium();
+    accessMode.value = AccessMode.demo;
+    if (!context.mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      (_) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = AppPalette.of(context);
@@ -364,6 +390,28 @@ class _SettingsTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
+        ValueListenableBuilder<AccessMode>(
+          valueListenable: accessMode,
+          builder: (context, mode, _) => mode == AccessMode.demo
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: GlassCard(
+                    radius: 22,
+                    onTap: () => _logout(context),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.logout_rounded),
+                        SizedBox(width: 14),
+                        Expanded(
+                          child: Text('Log out from this device',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+        ),
         GlassCard(
           radius: 22,
           child: Row(

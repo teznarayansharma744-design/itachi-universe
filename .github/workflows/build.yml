@@ -29,6 +29,13 @@ jobs:
         run: |
           sed -i 's#<application#<uses-permission android:name="android.permission.INTERNET"/>\n    <application#' android/app/src/main/AndroidManifest.xml
 
+      # Keep the signing key the same for every build. The phone's Android ID (used for the
+      # Device ID) depends on it, and so does installing a new APK over the old one.
+      - name: Use the fixed signing key
+        run: |
+          mkdir -p ~/.android
+          cp ci/debug.keystore ~/.android/debug.keystore
+
       - run: flutter pub get
 
       - run: flutter build apk --release

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../api.dart';
 import '../../glass.dart';
 import '../../theme.dart';
+import 'admin_content_screen.dart';
 import 'admin_login_screen.dart';
 
 const _teal = Color(0xFF19C3B1);
@@ -180,6 +181,28 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
+  Future<String?> _askText(String title, String hint, String initial) async {
+    final c = TextEditingController(text: initial);
+    final v = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(hintText: hint),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, c.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+    c.dispose();
+    return (v == null || v.length < 4) ? null : v.toUpperCase();
+  }
+
   Future<bool> _confirm(String title, String body, String action) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -204,6 +227,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       case 'extend':
         await _guard(() => Api.extendKey(k.key, 30));
         _toast('Extended by 30 days.');
+      case 'device':
+        final id = await _askText('Change device', 'New Device ID', k.deviceId);
+        if (id == null) return;
+        await _guard(() => Api.changeKeyDevice(k.key, id));
+        _toast('Device changed. The old phone is logged out.');
       case 'revoke':
         if (!await _confirm('Revoke key?',
             'The student loses premium right away. You can restore it later.', 'Revoke')) {
@@ -247,6 +275,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   const Expanded(
                     child: Text('Admin panel',
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  ),
+                  IconButton(
+                    tooltip: 'Lectures',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminContentScreen()),
+                    ),
+                    icon: const Icon(Icons.video_library_rounded),
                   ),
                   IconButton(
                     tooltip: 'Refresh',
@@ -454,6 +490,7 @@ class _KeyCard extends StatelessWidget {
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'copy', child: Text('Copy key')),
               const PopupMenuItem(value: 'extend', child: Text('Extend 30 days')),
+              const PopupMenuItem(value: 'device', child: Text('Change device / log out phone')),
               if (k.status == 'revoked')
                 const PopupMenuItem(value: 'restore', child: Text('Restore'))
               else

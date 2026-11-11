@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 /// Put your Render address here before building the app for students, for example
 /// 'https://itachi-api.onrender.com'. While it still contains "your-app", the app
 /// runs in offline sample mode so you can look at the screens.
-const defaultBaseUrl = 'https://itachi-backend.onrender.com';
+const defaultBaseUrl = 'https://your-app.onrender.com';
 
 class ApiException implements Exception {
   final String message;
@@ -160,6 +160,39 @@ class Api {
 
   static Future<void> deleteKey(String key) => _call('DELETE', '/admin/keys/$key');
 
+  /// Moves a key to another device. The old phone is logged out.
+  static Future<void> changeKeyDevice(String key, String deviceId) =>
+      _call('POST', '/admin/keys/$key/device', body: {'device_id': deviceId});
+
+  // ---------- admin: content ----------
+  /// Every batch with its subjects, units and lectures.
+  static Future<List<dynamic>> adminContent() async =>
+      (await _call('GET', '/admin/content')) as List<dynamic>;
+
+  /// kind: batches | subjects | units. parentId is the batch/subject it goes into.
+  static Future<void> addItem(String kind, String name, {int? parentId}) =>
+      _call('POST', '/admin/$kind', body: {'name': name, 'parent_id': parentId});
+
+  static Future<void> renameItem(String kind, int id, String name) =>
+      _call('PATCH', '/admin/$kind/$id', body: {'name': name});
+
+  /// kind: batches | subjects | units | lectures. Everything inside goes too.
+  static Future<void> deleteItem(String kind, int id) => _call('DELETE', '/admin/$kind/$id');
+
+  static Future<void> saveLecture({
+    int? id,
+    int? unitId,
+    required String title,
+    required String video,
+    required String pdf,
+    required bool free,
+  }) {
+    final body = {'title': title, 'video_url': video, 'pdf_url': pdf, 'free': free, 'unit_id': unitId};
+    return id == null
+        ? _call('POST', '/admin/lectures', body: body)
+        : _call('PUT', '/admin/lectures/$id', body: body);
+  }
+
   // ---------- plumbing ----------
   static Future<dynamic> _call(String method, String path,
       {Map<String, dynamic>? body}) async {
@@ -180,6 +213,10 @@ class Api {
           r = await http.get(uri, headers: headers).timeout(timeout);
         case 'DELETE':
           r = await http.delete(uri, headers: headers).timeout(timeout);
+        case 'PATCH':
+          r = await http.patch(uri, headers: headers, body: encoded ?? '{}').timeout(timeout);
+        case 'PUT':
+          r = await http.put(uri, headers: headers, body: encoded ?? '{}').timeout(timeout);
         default:
           r = await http.post(uri, headers: headers, body: encoded ?? '{}').timeout(timeout);
       }
