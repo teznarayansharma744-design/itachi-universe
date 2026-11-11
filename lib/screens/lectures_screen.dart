@@ -55,7 +55,8 @@ class _LecturesScreenState extends State<LecturesScreen> {
       );
 
   void _openPdf(Lecture l) {
-    if (!Api.isConfigured) {
+    final id = l.id;
+    if (!Api.isConfigured || id == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Sample mode: connect the app to your server to open PDFs.')),
       );
@@ -65,7 +66,7 @@ class _LecturesScreenState extends State<LecturesScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => PdfScreen(
-          lectureId: l.id,
+          lectureId: id,
           title: l.title,
           subtitle: '${widget.subject.name} / ${widget.unit.title}',
         ),
@@ -112,18 +113,14 @@ class _LecturesScreenState extends State<LecturesScreen> {
                         child: Text('Nothing here yet.',
                             style: TextStyle(color: p.textDim)),
                       )
-                    : AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        child: ListView.separated(
-                          key: ValueKey(_filter),
-                          padding: const EdgeInsets.only(bottom: 24),
-                          itemCount: items.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (_, i) => _LectureCard(
-                            lecture: items[i],
-                            onPlay: () => _play(items[i]),
-                            onPdf: () => _openPdf(items[i]),
-                          ),
+                    : ListView.separated(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        itemCount: items.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (_, i) => _LectureCard(
+                          lecture: items[i],
+                          onPlay: () => _play(items[i]),
+                          onPdf: () => _openPdf(items[i]),
                         ),
                       ),
               ),
@@ -149,8 +146,7 @@ class _Tab extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+        child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           alignment: Alignment.center,
           decoration: BoxDecoration(

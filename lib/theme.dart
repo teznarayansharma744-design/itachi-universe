@@ -1,6 +1,4 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 /// Colors for the glass UI, one set for dark and one for light.
 class AppPalette {
@@ -46,17 +44,32 @@ class AppPalette {
 /// Global theme switch (dark / light).
 final ValueNotifier<ThemeMode> themeMode = ValueNotifier(ThemeMode.dark);
 
+/// Screens appear instantly: no slide or fade, nothing to lag.
+class _NoTransition extends PageTransitionsBuilder {
+  const _NoTransition();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) =>
+      child;
+}
+
 ThemeData buildTheme(Brightness brightness) {
   final p = brightness == Brightness.dark ? AppPalette.dark : AppPalette.light;
   final base = ThemeData(brightness: brightness, useMaterial3: true);
   return base.copyWith(
     scaffoldBackgroundColor: p.bg,
-    // Smooth iOS-style slide between screens, with swipe-back on Android too.
+    splashFactory: InkRipple.splashFactory, // lighter than the default sparkle
     pageTransitionsTheme: const PageTransitionsTheme(builders: {
-      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.android: _NoTransition(),
+      TargetPlatform.iOS: _NoTransition(),
     }),
-    textTheme: GoogleFonts.interTextTheme(base.textTheme)
-        .apply(bodyColor: p.text, displayColor: p.text),
+    // The phone's own font: nothing to download, nothing to load.
+    textTheme: base.textTheme.apply(bodyColor: p.text, displayColor: p.text),
   );
 }

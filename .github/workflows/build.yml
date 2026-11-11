@@ -36,9 +36,14 @@ jobs:
           mkdir -p ~/.android
           cp ci/debug.keystore ~/.android/debug.keystore
 
+      - name: App name and logo
+        run: |
+          sed -i 's#android:label="[^"]*"#android:label="Itachi Universe"#' android/app/src/main/AndroidManifest.xml
+          cp -r ci/icons/* android/app/src/main/res/
+
       - run: flutter pub get
 
-      - run: flutter build apk --release
+      - run: flutter build apk --release --target-platform android-arm,android-arm64
 
       - uses: actions/upload-artifact@v4
         with:

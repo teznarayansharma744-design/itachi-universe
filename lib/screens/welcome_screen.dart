@@ -46,10 +46,9 @@ class WelcomeScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
                   ),
-                  child: GlassCard(
-                    padding: const EdgeInsets.all(16),
-                    radius: 20,
-                    child: const Icon(Icons.play_arrow_rounded, size: 28),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Image.asset('assets/logo.png', width: 64, height: 64),
                   ),
                 ),
               ),
