@@ -502,8 +502,8 @@ class _PlayerScreenState extends State<_PlayerView> {
 }
 
 
-/// Plays a YouTube link with YouTube's own player (it has its own controls,
-/// speed, quality and fullscreen).
+/// Plays a YouTube link inside our own player. YouTube's controls are switched off and
+/// replaced with ours, so it looks and feels like the rest of the app.
 class _YoutubeView extends StatefulWidget {
   final String title;
   final String subtitle;
@@ -519,33 +519,289 @@ class _YoutubeViewState extends State<_YoutubeView> {
     videoId: widget.videoId,
     autoPlay: true,
     params: const YoutubePlayerParams(
-      showFullscreenButton: true,
+      showControls: false,
+      showFullscreenButton: false,
       strictRelatedVideos: true,
+      playsInline: true,
     ),
   );
 
+  final ValueNotifier<Duration> _pos = ValueNotifier(Duration.zero);
+  StreamSubscription<YoutubeVideoState>? _sub;
+  Timer? _hideTimer;
+  Timer? _flashTimer;
+  bool _show = true;
+  bool _full = false;
+  double _speed = 1.0;
+  String? _flash;
+  Offset _lastTap = Offset.zero;
+  double _width = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = _yt.videoStateStream.listen((s) => _pos.value = s.position);
+    _scheduleHide();
+  }
+
   @override
   void dispose() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _sub?.cancel();
+    _hideTimer?.cancel();
+    _flashTimer?.cancel();
+    _pos.dispose();
     _yt.close();
     super.dispose();
   }
 
+  Duration get _total => _yt.value.metaData.duration;
+  bool get _playing => _yt.value.playerState == PlayerState.playing;
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && _playing) setState(() => _show = false);
+    });
+  }
+
+  void _toggleControls() {
+    setState(() => _show = !_show);
+    if (_show) _scheduleHide();
+  }
+
+  void _showFlash(String text) {
+    _flashTimer?.cancel();
+    setState(() => _flash = text);
+    _flashTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _flash = null);
+    });
+  }
+
+  void _seekBy(int seconds) {
+    var t = _pos.value + Duration(seconds: seconds);
+    if (t < Duration.zero) t = Duration.zero;
+    final total = _total;
+    if (total > Duration.zero && t > total) t = total;
+    _pos.value = t;
+    _yt.seekTo(seconds: t.inMilliseconds / 1000.0, allowSeekAhead: true);
+  }
+
+  void _togglePlay() {
+    _playing ? _yt.pauseVideo() : _yt.playVideo();
+    _scheduleHide();
+  }
+
+  Future<void> _setFullscreen(bool full) async {
+    if (full) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+    if (mounted) setState(() => _full = full);
+  }
+
+  void _onDoubleTap() {
+    final x = _lastTap.dx / _width;
+    if (x < 0.35) {
+      _seekBy(-10);
+      _showFlash('-10s');
+    } else if (x > 0.65) {
+      _seekBy(10);
+      _showFlash('+10s');
+    } else {
+      _togglePlay();
+    }
+  }
+
+  Widget _controls() {
+    return YoutubeValueBuilder(
+      controller: _yt,
+      builder: (context, value) {
+        final total = value.metaData.duration;
+        final playing = value.playerState == PlayerState.playing;
+        final buffering = value.playerState == PlayerState.buffering;
+        if (value.hasError) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(
+                'This video cannot be played here. The owner may have turned off embedding.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, height: 1.5),
+              ),
+            ),
+          );
+        }
+        return LayoutBuilder(builder: (context, box) {
+          _width = box.maxWidth;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _toggleControls,
+            onDoubleTapDown: (d) => _lastTap = d.localPosition,
+            onDoubleTap: _onDoubleTap,
+            child: Stack(
+              children: [
+                if (_show)
+                  Positioned.fill(child: Container(color: const Color(0x66000000))),
+                if (buffering) const Center(child: CircularProgressIndicator()),
+                if (_show && !buffering)
+                  Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          iconSize: 36,
+                          color: Colors.white,
+                          onPressed: () => _seekBy(-10),
+                          icon: const Icon(Icons.replay_10_rounded),
+                        ),
+                        const SizedBox(width: 16),
+                        IconButton(
+                          iconSize: 56,
+                          color: Colors.white,
+                          onPressed: _togglePlay,
+                          icon: Icon(playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded),
+                        ),
+                        const SizedBox(width: 16),
+                        IconButton(
+                          iconSize: 36,
+                          color: Colors.white,
+                          onPressed: () => _seekBy(10),
+                          icon: const Icon(Icons.forward_10_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (_flash != null)
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(_flash!,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                if (_show)
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 4,
+                    child: Row(
+                      children: [
+                        ValueListenableBuilder<Duration>(
+                          valueListenable: _pos,
+                          builder: (_, pos, __) => Text(_fmt(pos),
+                              style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        ),
+                        Expanded(
+                          child: ValueListenableBuilder<Duration>(
+                            valueListenable: _pos,
+                            builder: (_, pos, __) {
+                              final ms = total.inMilliseconds;
+                              final v = ms <= 0 ? 0.0 : (pos.inMilliseconds / ms).clamp(0.0, 1.0);
+                              return Slider(
+                                value: v,
+                                onChanged: ms <= 0
+                                    ? null
+                                    : (x) => _pos.value = Duration(milliseconds: (ms * x).round()),
+                                onChangeEnd: ms <= 0
+                                    ? null
+                                    : (x) {
+                                        _yt.seekTo(seconds: ms * x / 1000.0, allowSeekAhead: true);
+                                        _scheduleHide();
+                                      },
+                              );
+                            },
+                          ),
+                        ),
+                        Text(_fmt(total),
+                            style: const TextStyle(color: Colors.white, fontSize: 12)),
+                        PopupMenuButton<double>(
+                          tooltip: 'Speed',
+                          initialValue: _speed,
+                          onSelected: (v) {
+                            setState(() => _speed = v);
+                            _yt.setPlaybackRate(v);
+                          },
+                          itemBuilder: (_) => [
+                            for (final v in const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0])
+                              PopupMenuItem(value: v, child: Text('${v}x')),
+                          ],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                            child: Text('${_speed}x',
+                                style: const TextStyle(
+                                    color: Colors.white, fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        IconButton(
+                          color: Colors.white,
+                          onPressed: () => _setFullscreen(!_full),
+                          icon: Icon(_full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          );
+        });
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return YoutubePlayerScaffold(
-      controller: _yt,
+    final stage = AspectRatio(
       aspectRatio: 16 / 9,
-      builder: (context, player) => Scaffold(
+      child: Stack(
+        children: [
+          // The YouTube page cannot be touched: only our controls react.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: YoutubePlayer(controller: _yt, aspectRatio: 16 / 9),
+            ),
+          ),
+          Positioned.fill(child: _controls()),
+        ],
+      ),
+    );
+
+    return PopScope(
+      canPop: !_full,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _setFullscreen(false);
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
         body: GlassBackground(
-          child: SafeArea(
+          child: Container(
+            color: _full ? Colors.black : null,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-                  child: BackHeader(caption: widget.subtitle, title: widget.title),
+                if (!_full)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                    child: BackHeader(caption: widget.subtitle, title: widget.title),
+                  ),
+                // The key keeps the player alive when switching to fullscreen.
+                Expanded(
+                  key: const ValueKey('stage'),
+                  child: Align(
+                    alignment: _full ? Alignment.center : Alignment.topCenter,
+                    child: stage,
+                  ),
                 ),
-                player,
               ],
             ),
           ),

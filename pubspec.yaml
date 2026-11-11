@@ -14,7 +14,7 @@ dependencies:
   http: ^1.2.2
   android_id: ^0.4.0
   crypto: ^3.0.3
-  youtube_player_iframe: ^5.2.2
+  youtube_player_iframe: ^6.0.0
   pdfx: ^2.9.2
   url_launcher: ^6.3.0
 
