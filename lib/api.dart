@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 /// Put your Render address here before building the app for students, for example
 /// 'https://itachi-api.onrender.com'. While it still contains "your-app", the app
 /// runs in offline sample mode so you can look at the screens.
-const defaultBaseUrl = 'https://your-app.onrender.com';
+const defaultBaseUrl = 'https://itachi-backend.onrender.com';
 
 class ApiException implements Exception {
   final String message;
