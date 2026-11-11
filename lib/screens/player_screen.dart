@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import '../api.dart';
 import '../data.dart';
 import '../glass.dart';
+import '../media_links.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
@@ -52,6 +54,10 @@ class _PlayerLoaderState extends State<PlayerScreen> {
       future: _source,
       builder: (context, snap) {
         if (snap.hasData) {
+          final yt = youtubeId(snap.data!.url);
+          if (yt != null) {
+            return _YoutubeView(title: widget.title, subtitle: widget.subtitle, videoId: yt);
+          }
           return _PlayerView(
             title: widget.title,
             subtitle: widget.subtitle,
@@ -490,6 +496,60 @@ class _PlayerScreenState extends State<_PlayerView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+/// Plays a YouTube link with YouTube's own player (it has its own controls,
+/// speed, quality and fullscreen).
+class _YoutubeView extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  final String videoId;
+  const _YoutubeView({required this.title, required this.subtitle, required this.videoId});
+
+  @override
+  State<_YoutubeView> createState() => _YoutubeViewState();
+}
+
+class _YoutubeViewState extends State<_YoutubeView> {
+  late final YoutubePlayerController _yt = YoutubePlayerController.fromVideoId(
+    videoId: widget.videoId,
+    autoPlay: true,
+    params: const YoutubePlayerParams(
+      showFullscreenButton: true,
+      strictRelatedVideos: true,
+    ),
+  );
+
+  @override
+  void dispose() {
+    _yt.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return YoutubePlayerScaffold(
+      controller: _yt,
+      aspectRatio: 16 / 9,
+      builder: (context, player) => Scaffold(
+        body: GlassBackground(
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                  child: BackHeader(caption: widget.subtitle, title: widget.title),
+                ),
+                player,
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

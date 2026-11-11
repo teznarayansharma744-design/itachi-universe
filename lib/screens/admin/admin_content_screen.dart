@@ -440,14 +440,14 @@ class _LectureSheetState extends State<_LectureSheet> {
                   controller: _video,
                   keyboardType: TextInputType.url,
                   autocorrect: false,
-                  decoration: _dec(p, 'Video link (https://...)'),
+                  decoration: _dec(p, 'Video link (mp4, m3u8 or YouTube)'),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: _pdf,
                   keyboardType: TextInputType.url,
                   autocorrect: false,
-                  decoration: _dec(p, 'PDF link (optional)'),
+                  decoration: _dec(p, 'PDF link (direct or Google Drive)'),
                 ),
                 const SizedBox(height: 8),
                 SwitchListTile(

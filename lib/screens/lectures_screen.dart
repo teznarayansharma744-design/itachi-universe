@@ -5,6 +5,8 @@ import '../data.dart';
 import '../glass.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../api.dart';
+import 'pdf_screen.dart';
 import 'player_screen.dart';
 
 enum _Filter { all, video, pdf }
@@ -52,9 +54,24 @@ class _LecturesScreenState extends State<LecturesScreen> {
         ),
       );
 
-  void _openPdf() => ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PDF viewer is coming in the next step.')),
+  void _openPdf(Lecture l) {
+    if (!Api.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sample mode: connect the app to your server to open PDFs.')),
       );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PdfScreen(
+          lectureId: l.id,
+          title: l.title,
+          subtitle: '${widget.subject.name} / ${widget.unit.title}',
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +122,7 @@ class _LecturesScreenState extends State<LecturesScreen> {
                           itemBuilder: (_, i) => _LectureCard(
                             lecture: items[i],
                             onPlay: () => _play(items[i]),
-                            onPdf: _openPdf,
+                            onPdf: () => _openPdf(items[i]),
                           ),
                         ),
                       ),
