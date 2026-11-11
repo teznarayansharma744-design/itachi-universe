@@ -17,6 +17,13 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// Where to get a video or PDF: a URL plus any headers the request needs.
+class PlaySource {
+  final String url;
+  final Map<String, String> headers;
+  const PlaySource(this.url, this.headers);
+}
+
 class AdminKey {
   final String key;
   final String deviceId;
@@ -98,6 +105,14 @@ class Api {
     } on ApiException catch (e) {
       return e.unauthorized ? false : null;
     }
+  }
+
+  /// Asks the server where to find a lecture's video or PDF. The server checks the key.
+  /// A direct link is opened as it is; otherwise the file streams through the server.
+  static Future<PlaySource> playSource(int lectureId, String kind) async {
+    final data = await _call('GET', '/play/$lectureId/$kind');
+    if (data['kind'] == 'link') return PlaySource(data['url'] as String, const {});
+    return PlaySource('$_baseUrl/media/$lectureId/$kind', authHeaders);
   }
 
   static Future<List<dynamic>> catalogJson() async {

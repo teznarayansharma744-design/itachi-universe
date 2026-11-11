@@ -8,6 +8,7 @@ import '../api.dart';
 import '../data.dart';
 import '../glass.dart';
 import '../theme.dart';
+import '../widgets.dart';
 
 String _fmt(Duration d) {
   final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -15,9 +16,12 @@ String _fmt(Duration d) {
   return d.inHours > 0 ? '${d.inHours}:$m:$s' : '$m:$s';
 }
 
+/// Opens the player for a lecture. First asks the server where the video is
+/// (and whether this student may watch it), then shows the player.
 class PlayerScreen extends StatefulWidget {
   final String title;
   final String subtitle;
+
   /// Server id of the lecture. Null plays the built-in sample video.
   final int? lectureId;
   const PlayerScreen({
@@ -28,10 +32,89 @@ class PlayerScreen extends StatefulWidget {
   });
 
   @override
-  State<PlayerScreen> createState() => _PlayerScreenState();
+  State<PlayerScreen> createState() => _PlayerLoaderState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerLoaderState extends State<PlayerScreen> {
+  late Future<PlaySource> _source = _resolve();
+
+  Future<PlaySource> _resolve() async {
+    final id = widget.lectureId;
+    if (id == null || !Api.isConfigured) {
+      return const PlaySource(sampleVideoUrl, {});
+    }
+    return Api.playSource(id, 'video');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PlaySource>(
+      future: _source,
+      builder: (context, snap) {
+        if (snap.hasData) {
+          return _PlayerView(
+            title: widget.title,
+            subtitle: widget.subtitle,
+            source: snap.data!,
+          );
+        }
+        final p = AppPalette.of(context);
+        return Scaffold(
+          body: GlassBackground(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  BackHeader(caption: widget.subtitle, title: widget.title),
+                  Expanded(
+                    child: Center(
+                      child: snap.hasError
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  snap.error is ApiException
+                                      ? (snap.error as ApiException).message
+                                      : 'Could not load this video.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: p.textDim, height: 1.5),
+                                ),
+                                const SizedBox(height: 14),
+                                OutlinedButton(
+                                  onPressed: () => setState(() => _source = _resolve()),
+                                  child: const Text('Try again'),
+                                ),
+                              ],
+                            )
+                          : const CircularProgressIndicator(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PlayerView extends StatefulWidget {
+  final String title;
+  final String subtitle;
+  final PlaySource source;
+  const _PlayerView({
+    required this.title,
+    required this.subtitle,
+    required this.source,
+  });
+
+  @override
+  State<_PlayerView> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<_PlayerView> {
   late final VideoPlayerController _c;
   Timer? _hideTimer;
   Timer? _flashTimer;
@@ -46,13 +129,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    final id = widget.lectureId;
-    final url = (id == null || !Api.isConfigured)
-        ? sampleVideoUrl
-        : '${Api.baseUrlSync}/media/$id/video';
     _c = VideoPlayerController.networkUrl(
-      Uri.parse(url),
-      httpHeaders: Api.authHeaders, // the premium key, so locked videos can play
+      Uri.parse(widget.source.url),
+      httpHeaders: widget.source.headers,
     );
     _c.addListener(() {
       if (mounted) setState(() {});
