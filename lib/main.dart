@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
-import 'screens/welcome_screen.dart';
+import 'api.dart';
+import 'screens/launcher.dart';
 import 'theme.dart';
 
-void main() => runApp(const ItachiApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Api.init();
+  runApp(const ItachiApp());
+}
 
 class ItachiApp extends StatelessWidget {
   const ItachiApp({super.key});
@@ -18,7 +23,7 @@ class ItachiApp extends StatelessWidget {
         themeMode: mode,
         theme: buildTheme(Brightness.light),
         darkTheme: buildTheme(Brightness.dark),
-        home: const WelcomeScreen(),
+        home: const Launcher(),
       ),
     );
   }

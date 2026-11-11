@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../access.dart';
+import '../catalog.dart';
 import '../data.dart';
 import '../device_id.dart';
 import '../glass.dart';
@@ -21,13 +22,24 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tab = 0;
 
   @override
+  void initState() {
+    super.initState();
+    Catalog.instance.load();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
       body: GlassBackground(
         child: IndexedStack(
           index: _tab,
-          children: const [_HomeTab(), _LibraryTab(), _SettingsTab()],
+          // Pull down on Home or Library to fetch new lectures from the server.
+          children: const [
+            _Refreshable(_HomeTab()),
+            _Refreshable(_LibraryTab()),
+            _SettingsTab(),
+          ],
         ),
       ),
       bottomNavigationBar: SafeArea(
@@ -174,7 +186,7 @@ class _HomeTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        if (!isDemo) ...[
+        if (!isDemo && Catalog.instance.usingSample) ...[
         const Text('Continue watching',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
@@ -272,7 +284,7 @@ class _HomeTab extends StatelessWidget {
         const Text('Your batches',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
-        for (final b in sampleBatches) _BatchTile(b),
+        const _BatchList(),
       ],
     );
   }
@@ -289,7 +301,7 @@ class _LibraryTab extends StatelessWidget {
         const Text('Library',
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
         const SizedBox(height: 20),
-        for (final b in sampleBatches) _BatchTile(b),
+        const _BatchList(),
       ],
     );
   }
@@ -366,6 +378,61 @@ class _SettingsTab extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Pull-to-refresh wrapper for a tab that contains a ListView.
+class _Refreshable extends StatelessWidget {
+  final Widget child;
+  const _Refreshable(this.child);
+
+  @override
+  Widget build(BuildContext context) =>
+      RefreshIndicator(onRefresh: Catalog.instance.load, child: child);
+}
+
+/// The batch list: spinner while loading, a retry card on error, otherwise the tiles.
+class _BatchList extends StatelessWidget {
+  const _BatchList();
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppPalette.of(context);
+    return ListenableBuilder(
+      listenable: Catalog.instance,
+      builder: (context, _) {
+        final c = Catalog.instance;
+        if (c.loading && c.batches.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (c.error != null && c.batches.isEmpty) {
+          return GlassCard(
+            radius: 22,
+            child: Column(
+              children: [
+                Text(c.error!,
+                    textAlign: TextAlign.center, style: TextStyle(color: p.textDim)),
+                const SizedBox(height: 12),
+                OutlinedButton(onPressed: c.load, child: const Text('Try again')),
+              ],
+            ),
+          );
+        }
+        if (c.batches.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text('No batches yet. Pull down to refresh.',
+                  style: TextStyle(color: p.textDim)),
+            ),
+          );
+        }
+        return Column(children: [for (final b in c.batches) _BatchTile(b)]);
+      },
     );
   }
 }

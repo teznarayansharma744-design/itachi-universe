@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 
+import '../api.dart';
 import '../data.dart';
 import '../glass.dart';
 import '../theme.dart';
@@ -17,7 +18,14 @@ String _fmt(Duration d) {
 class PlayerScreen extends StatefulWidget {
   final String title;
   final String subtitle;
-  const PlayerScreen({super.key, required this.title, required this.subtitle});
+  /// Server id of the lecture. Null plays the built-in sample video.
+  final int? lectureId;
+  const PlayerScreen({
+    super.key,
+    required this.title,
+    required this.subtitle,
+    this.lectureId,
+  });
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -38,7 +46,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    _c = VideoPlayerController.networkUrl(Uri.parse(sampleVideoUrl));
+    final id = widget.lectureId;
+    final url = (id == null || !Api.isConfigured)
+        ? sampleVideoUrl
+        : '${Api.baseUrlSync}/media/$id/video';
+    _c = VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      httpHeaders: Api.authHeaders, // the premium key, so locked videos can play
+    );
     _c.addListener(() {
       if (mounted) setState(() {});
     });
@@ -242,12 +257,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
           children: [
             const ColoredBox(color: Colors.black),
             Center(
-              child: _c.value.isInitialized
-                  ? AspectRatio(
-                      aspectRatio: _c.value.aspectRatio,
-                      child: VideoPlayer(_c),
+              child: _c.value.hasError
+                  ? const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'This video cannot play right now.\nYour key may have expired, or the server is waking up. Go back and try again in a minute.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70, height: 1.5),
+                      ),
                     )
-                  : const CircularProgressIndicator(),
+                  : _c.value.isInitialized
+                      ? AspectRatio(
+                          aspectRatio: _c.value.aspectRatio,
+                          child: VideoPlayer(_c),
+                        )
+                      : const CircularProgressIndicator(),
             ),
             if (_c.value.isInitialized && _c.value.isBuffering)
               const Center(child: CircularProgressIndicator(strokeWidth: 3)),

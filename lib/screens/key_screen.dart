@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../access.dart';
+import '../api.dart';
 import '../device_id.dart';
 import '../glass.dart';
 import '../theme.dart';
@@ -24,20 +25,32 @@ class _KeyScreenState extends State<KeyScreen> {
     super.dispose();
   }
 
-  void _activate() {
+  bool _busy = false;
+
+  Future<void> _activate() async {
     final key = _keyController.text.trim();
     if (key.isEmpty) {
       _toast('Please enter your premium key.');
       return;
     }
-    // DEV ONLY: any non-empty key unlocks premium so you can test the screens.
-    accessMode.value = AccessMode.premium;
-    // TODO(next step): send key + device ID to the server and unlock only on success.
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreen()),
-      (route) => false,
-    );
+    setState(() => _busy = true);
+    try {
+      // While the server address is not set, any key opens premium (sample mode only).
+      if (Api.isConfigured) {
+        await Api.activate(key, await _deviceId);
+      }
+      accessMode.value = AccessMode.premium;
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        (route) => false,
+      );
+    } on ApiException catch (e) {
+      if (mounted) _toast(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   void _toast(String msg) =>
@@ -156,12 +169,18 @@ class _KeyScreenState extends State<KeyScreen> {
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: TextButton(
-                    onPressed: _activate,
-                    child: const Text('Activate Premium',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600)),
+                    onPressed: _busy ? null : _activate,
+                    child: _busy
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2.5, color: Colors.white))
+                        : const Text('Activate Premium',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600)),
                   ),
                 ),
               ),

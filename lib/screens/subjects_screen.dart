@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../catalog.dart';
 import '../data.dart';
 import '../glass.dart';
 import '../theme.dart';
@@ -22,6 +23,7 @@ class SubjectsScreen extends StatelessWidget {
             children: [
               BackHeader(caption: 'Batch', title: batch.name),
               const SizedBox(height: 20),
+              if (Catalog.instance.usingSample) ...[
               GlassCard(
                 radius: 22,
                 padding: const EdgeInsets.all(16),
@@ -53,6 +55,7 @@ class SubjectsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
+              ],
               const Text('Subjects',
                   style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
               const SizedBox(height: 12),

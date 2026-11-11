@@ -45,6 +45,7 @@ class _LecturesScreenState extends State<LecturesScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => PlayerScreen(
+            lectureId: l.id,
             title: l.title,
             subtitle: '${widget.subject.name} / ${widget.unit.title}',
           ),
