@@ -425,6 +425,13 @@ class _SettingsTab extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 20),
+        Center(
+          child: Text(
+            'Itachi Universe  v${const String.fromEnvironment('APP_VERSION', defaultValue: 'dev')}',
+            style: TextStyle(fontSize: 12, color: p.textDim),
+          ),
+        ),
       ],
     );
   }
