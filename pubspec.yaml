@@ -17,6 +17,10 @@ dependencies:
   youtube_player_iframe: ^6.0.0
   pdfx: ^2.9.2
   url_launcher: ^6.3.0
+  path_provider: ^2.1.4
+  open_filex: ^4.7.0
+  flutter_file_dialog: ^3.0.2
+  flutter_file_dialog: ^3.0.2
 
 dev_dependencies:
   flutter_test:

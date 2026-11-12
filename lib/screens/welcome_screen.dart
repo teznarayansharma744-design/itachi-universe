@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../access.dart';
+import '../contact.dart';
 import '../glass.dart';
 import '../theme.dart';
 import 'key_screen.dart';
@@ -10,11 +11,6 @@ import 'home_screen.dart';
 
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
-
-  void _soon(BuildContext context, String what) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$what is coming in the next step.')));
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,7 +89,7 @@ class WelcomeScreen extends StatelessWidget {
                 icon: Icons.workspace_premium_rounded,
                 title: 'Get Premium',
                 subtitle: 'Contact us on Telegram to get a key',
-                onTap: () => _soon(context, 'The Telegram link'),
+                onTap: () => openAdminTelegram(context),
               ),
               const Spacer(),
               Center(

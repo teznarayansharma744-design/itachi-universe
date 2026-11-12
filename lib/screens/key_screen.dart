@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import '../contact.dart';
 import 'package:flutter/services.dart';
 
 import '../access.dart';
@@ -85,10 +87,18 @@ class _KeyScreenState extends State<KeyScreen> {
                   style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(
-                'Your key is generated for this device only. Copy the Device ID below and send it to our Telegram bot.',
+                'Your key is generated for this device only. Copy the Device ID below and send it to the admin on Telegram to get your key.',
                 style: TextStyle(fontSize: 15, height: 1.5, color: p.textDim),
               ),
-              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => openAdminTelegram(context),
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('Message admin on Telegram'),
+                ),
+              ),
+              const SizedBox(height: 12),
               GlassCard(
                 padding: const EdgeInsets.all(20),
                 radius: 28,

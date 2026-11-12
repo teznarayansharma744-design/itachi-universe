@@ -650,6 +650,25 @@ class _YoutubeViewState extends State<_YoutubeView> {
               children: [
                 if (_show)
                   Positioned.fill(child: Container(color: const Color(0x66000000))),
+                // YouTube shows its own title bar (channel, copy link) at the start and when
+                // paused. Our strip sits over it and shows the lecture title instead.
+                if (_show || !playing)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 56,
+                      color: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      alignment: Alignment.centerLeft,
+                      child: Text(widget.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
                 if (buffering) const Center(child: CircularProgressIndicator()),
                 if (_show && !buffering)
                   Center(

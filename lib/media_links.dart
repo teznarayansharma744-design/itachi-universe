@@ -31,3 +31,15 @@ String directPdfUrl(String url) {
   if (id == null) return url;
   return 'https://drive.google.com/uc?export=download&id=$id';
 }
+
+/// For a Google Drive link, the normal "view" link (opens in Drive's own PDF viewer).
+/// For any other link, a Google viewer link that can show a public PDF.
+String viewerUrl(String url) {
+  final u = Uri.tryParse(url.trim());
+  if (u != null && u.host.toLowerCase().endsWith('drive.google.com')) {
+    final m = RegExp(r'/file/d/([A-Za-z0-9_-]+)').firstMatch(u.path);
+    final id = m?.group(1) ?? u.queryParameters['id'];
+    if (id != null) return 'https://drive.google.com/file/d/$id/view';
+  }
+  return 'https://docs.google.com/viewer?url=${Uri.encodeComponent(url)}';
+}
