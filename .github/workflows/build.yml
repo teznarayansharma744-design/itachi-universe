@@ -61,7 +61,7 @@ jobs:
 
       # The same fingerprint every time means new APKs install over the old one.
       - name: Show signing fingerprint
-        run: keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | grep SHA256
+        run: keytool -list -keystore ci/debug.keystore -storepass android | grep -i "SHA" || true
 
       - uses: actions/upload-artifact@v4
         with:
