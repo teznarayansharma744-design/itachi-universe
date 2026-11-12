@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
-import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../api.dart';
 import '../data.dart';
@@ -502,8 +504,68 @@ class _PlayerScreenState extends State<_PlayerView> {
 }
 
 
-/// Plays a YouTube link inside our own player. YouTube's controls are switched off and
-/// replaced with ours, so it looks and feels like the rest of the app.
+/// YouTube page that we load into a WebView. YouTube's own controls are switched off.
+/// A transparent shield catches every touch so nothing of YouTube can be tapped, and
+/// black covers hide YouTube's title bar, copy-link button, logo and big play button
+/// while the video is not playing. Our own controls sit below the video in Flutter.
+String _youtubeHtml(String videoId) => """
+<!doctype html><html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;-webkit-tap-highlight-color:transparent}
+#player{position:absolute;left:0;top:0;width:100%;height:100%;border:0}
+#shield{position:absolute;left:0;top:0;right:0;bottom:0;z-index:5}
+.cover{position:absolute;left:0;right:0;background:#000;z-index:6;display:none;pointer-events:none}
+body.cv .cover{display:block}
+#top{top:0;height:17%}
+#bottom{bottom:0;height:17%}
+#mid{left:50%;top:50%;right:auto;width:84px;height:84px;margin:-42px 0 0 -42px;border-radius:50%;background:#000;opacity:.78}
+#mid:after{content:"";position:absolute;left:33px;top:24px;border-style:solid;border-width:18px 0 18px 30px;border-color:transparent transparent transparent #fff}
+#ttl{position:absolute;left:14px;right:14px;top:0;bottom:0;color:#fff;font:600 14px/1 sans-serif;display:flex;align-items:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#flash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);color:#fff;padding:8px 14px;border-radius:14px;font:600 14px sans-serif;display:none;z-index:9}
+</style></head><body class="cv">
+<div id="player"></div>
+<div id="shield"></div>
+<div id="top" class="cover"><div id="ttl"></div></div>
+<div id="bottom" class="cover"></div>
+<div id="mid" class="cover"></div>
+<div id="flash"></div>
+<script>
+var player=null, ready=false, tapTimer=null, flashTimer=null;
+function post(o){try{Itachi.postMessage(JSON.stringify(o));}catch(e){}}
+function setCovers(on){document.body.className=on?'cv':'';}
+function setTitle(t){document.getElementById('ttl').textContent=t;}
+function flash(t){var f=document.getElementById('flash');f.textContent=t;f.style.display='block';clearTimeout(flashTimer);flashTimer=setTimeout(function(){f.style.display='none';},700);}
+function onYouTubeIframeAPIReady(){
+  player=new YT.Player('player',{
+    videoId:'$videoId',
+    host:'https://www.youtube-nocookie.com',
+    width:'100%',height:'100%',
+    playerVars:{autoplay:1,controls:0,playsinline:1,rel:0,fs:0,disablekb:1,iv_load_policy:3,modestbranding:1,cc_load_policy:0,origin:'https://www.youtube-nocookie.com'},
+    events:{
+      onReady:function(){ready=true;post({t:'ready'});try{player.playVideo();}catch(e){}},
+      onStateChange:function(e){post({t:'state',s:e.data});},
+      onError:function(e){post({t:'error',c:e.data});}
+    }
+  });
+}
+setInterval(function(){
+  if(ready&&player&&player.getCurrentTime){
+    post({t:'time',p:player.getCurrentTime(),d:player.getDuration()});
+  }
+},500);
+document.getElementById('shield').addEventListener('click',function(e){
+  var x=e.clientX/window.innerWidth;
+  if(tapTimer){clearTimeout(tapTimer);tapTimer=null;post({t:'dbl',x:x});}
+  else{tapTimer=setTimeout(function(){tapTimer=null;post({t:'tap',x:x});},260);}
+});
+var tag=document.createElement('script');tag.src='https://www.youtube.com/iframe_api';document.head.appendChild(tag);
+</script></body></html>
+""";
+
+/// Plays a YouTube link in our own player. Controls are ours and sit below the video.
 class _YoutubeView extends StatefulWidget {
   final String title;
   final String subtitle;
@@ -515,82 +577,116 @@ class _YoutubeView extends StatefulWidget {
 }
 
 class _YoutubeViewState extends State<_YoutubeView> {
-  late final YoutubePlayerController _yt = YoutubePlayerController.fromVideoId(
-    videoId: widget.videoId,
-    autoPlay: true,
-    params: const YoutubePlayerParams(
-      showControls: false,
-      showFullscreenButton: false,
-      strictRelatedVideos: true,
-      playsInline: true,
-    ),
-  );
+  static const _base = 'https://www.youtube-nocookie.com';
+  late final WebViewController _web;
 
-  final ValueNotifier<Duration> _pos = ValueNotifier(Duration.zero);
-  StreamSubscription<YoutubeVideoState>? _sub;
-  Timer? _hideTimer;
-  Timer? _flashTimer;
-  bool _show = true;
-  bool _full = false;
+  int _state = -1; // YouTube: -1 not started, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued
+  Duration _pos = Duration.zero;
+  Duration _dur = Duration.zero;
+  double? _drag; // slider value while the finger is on it
   double _speed = 1.0;
-  String? _flash;
-  Offset _lastTap = Offset.zero;
-  double _width = 1;
+  bool _full = false;
+  int? _error;
+  Timer? _coverTimer;
+
+  bool get _playing => _state == 1;
 
   @override
   void initState() {
     super.initState();
-    _sub = _yt.videoStateStream.listen((s) => _pos.value = s.position);
-    _scheduleHide();
+    _web = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setUserAgent(
+          'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36')
+      ..addJavaScriptChannel('Itachi', onMessageReceived: (m) => _onMessage(m.message))
+      ..setNavigationDelegate(NavigationDelegate(
+        // Stay on the video: no link inside the page may open another page.
+        onNavigationRequest: (r) => (!r.isMainFrame || r.url.startsWith(_base) || r.url == 'about:blank')
+            ? NavigationDecision.navigate
+            : NavigationDecision.prevent,
+      ));
+    _start();
+  }
+
+  Future<void> _start() async {
+    final platform = _web.platform;
+    if (platform is AndroidWebViewController) {
+      await platform.setMediaPlaybackRequiresUserGesture(false);
+    }
+    await _web.loadHtmlString(_youtubeHtml(widget.videoId), baseUrl: _base);
   }
 
   @override
   void dispose() {
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    _sub?.cancel();
-    _hideTimer?.cancel();
-    _flashTimer?.cancel();
-    _pos.dispose();
-    _yt.close();
+    _coverTimer?.cancel();
     super.dispose();
   }
 
-  Duration get _total => _yt.value.metaData.duration;
-  bool get _playing => _yt.value.playerState == PlayerState.playing;
+  // ---------- talking to the page ----------
+  void _js(String code) => _web.runJavaScript(code);
 
-  void _scheduleHide() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _playing) setState(() => _show = false);
-    });
+  void _setCovers(bool on) => _js('setCovers(${on ? 'true' : 'false'})');
+
+  void _onMessage(String raw) {
+    Map<String, dynamic> m;
+    try {
+      m = jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+    switch (m['t']) {
+      case 'ready':
+        _js('setTitle(${jsonEncode(widget.title)})');
+      case 'state':
+        final s = (m['s'] as num).toInt();
+        _coverTimer?.cancel();
+        if (s == 1) {
+          // YouTube shows its title for a few seconds when playback starts. Keep covered.
+          _coverTimer = Timer(const Duration(seconds: 5), () => _setCovers(false));
+        } else if (s != 3) {
+          _setCovers(true);
+        }
+        if (mounted) setState(() => _state = s);
+      case 'time':
+        if (_drag != null || !mounted) return;
+        setState(() {
+          _pos = Duration(milliseconds: ((m['p'] as num) * 1000).round());
+          final d = (m['d'] as num?) ?? 0;
+          if (d > 0) _dur = Duration(milliseconds: (d * 1000).round());
+        });
+      case 'tap':
+        _togglePlay();
+      case 'dbl':
+        final x = (m['x'] as num).toDouble();
+        if (x < 0.35) {
+          _seekBy(-10);
+        } else if (x > 0.65) {
+          _seekBy(10);
+        } else {
+          _togglePlay();
+        }
+      case 'error':
+        if (mounted) setState(() => _error = (m['c'] as num).toInt());
+    }
   }
 
-  void _toggleControls() {
-    setState(() => _show = !_show);
-    if (_show) _scheduleHide();
-  }
-
-  void _showFlash(String text) {
-    _flashTimer?.cancel();
-    setState(() => _flash = text);
-    _flashTimer = Timer(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() => _flash = null);
-    });
-  }
+  // ---------- actions ----------
+  void _togglePlay() => _js(_playing ? 'player.pauseVideo()' : 'player.playVideo()');
 
   void _seekBy(int seconds) {
-    var t = _pos.value + Duration(seconds: seconds);
+    var t = _pos + Duration(seconds: seconds);
     if (t < Duration.zero) t = Duration.zero;
-    final total = _total;
-    if (total > Duration.zero && t > total) t = total;
-    _pos.value = t;
-    _yt.seekTo(seconds: t.inMilliseconds / 1000.0, allowSeekAhead: true);
+    if (_dur > Duration.zero && t > _dur) t = _dur;
+    setState(() => _pos = t);
+    _js('player.seekTo(${t.inMilliseconds / 1000.0}, true); flash("${seconds > 0 ? '+' : ''}$seconds s")');
   }
 
-  void _togglePlay() {
-    _playing ? _yt.pauseVideo() : _yt.playVideo();
-    _scheduleHide();
+  void _setSpeed(double v) {
+    setState(() => _speed = v);
+    _js('player.setPlaybackRate($v)');
   }
 
   Future<void> _setFullscreen(bool full) async {
@@ -607,222 +703,132 @@ class _YoutubeViewState extends State<_YoutubeView> {
     if (mounted) setState(() => _full = full);
   }
 
-  void _onDoubleTap() {
-    final x = _lastTap.dx / _width;
-    if (x < 0.35) {
-      _seekBy(-10);
-      _showFlash('-10s');
-    } else if (x > 0.65) {
-      _seekBy(10);
-      _showFlash('+10s');
-    } else {
-      _togglePlay();
+  // ---------- UI ----------
+  Widget _controls(AppPalette p) {
+    if (_error != null) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text(
+          'This video cannot be played here. Its owner may have turned off embedding, or it is private.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: p.textDim, height: 1.5),
+        ),
+      );
     }
-  }
-
-  Widget _controls() {
-    return YoutubeValueBuilder(
-      controller: _yt,
-      builder: (context, value) {
-        final total = value.metaData.duration;
-        final playing = value.playerState == PlayerState.playing;
-        final buffering = value.playerState == PlayerState.buffering;
-        if (value.hasError) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'This video cannot be played here. The owner may have turned off embedding.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, height: 1.5),
+    final totalMs = _dur.inMilliseconds;
+    final value = _drag ?? (totalMs <= 0 ? 0.0 : (_pos.inMilliseconds / totalMs).clamp(0.0, 1.0));
+    final shownPos = _drag == null ? _pos : Duration(milliseconds: (totalMs * _drag!).round());
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Text(_fmt(shownPos), style: TextStyle(fontSize: 12, color: p.textDim)),
+              Expanded(
+                child: Slider(
+                  value: value,
+                  onChanged: totalMs <= 0 ? null : (v) => setState(() => _drag = v),
+                  onChangeEnd: totalMs <= 0
+                      ? null
+                      : (v) {
+                          final t = Duration(milliseconds: (totalMs * v).round());
+                          setState(() {
+                            _pos = t;
+                            _drag = null;
+                          });
+                          _js('player.seekTo(${t.inMilliseconds / 1000.0}, true)');
+                        },
+                ),
               ),
-            ),
-          );
-        }
-        return LayoutBuilder(builder: (context, box) {
-          _width = box.maxWidth;
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _toggleControls,
-            onDoubleTapDown: (d) => _lastTap = d.localPosition,
-            onDoubleTap: _onDoubleTap,
-            child: Stack(
-              children: [
-                if (_show)
-                  Positioned.fill(child: Container(color: const Color(0x66000000))),
-                // YouTube shows its own title bar (channel, copy link) at the start and when
-                // paused. Our strip sits over it and shows the lecture title instead.
-                if (_show || !playing)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 56,
-                      color: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      alignment: Alignment.centerLeft,
-                      child: Text(widget.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                    ),
+              Text(_fmt(_dur), style: TextStyle(fontSize: 12, color: p.textDim)),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              PopupMenuButton<double>(
+                tooltip: 'Speed',
+                initialValue: _speed,
+                onSelected: _setSpeed,
+                itemBuilder: (_) => [
+                  for (final v in const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0])
+                    PopupMenuItem(value: v, child: Text('${v}x')),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Text('${_speed}x', style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+              Row(
+                children: [
+                  IconButton(
+                    iconSize: 32,
+                    onPressed: () => _seekBy(-10),
+                    icon: const Icon(Icons.replay_10_rounded),
                   ),
-                if (buffering) const Center(child: CircularProgressIndicator()),
-                if (_show && !buffering)
-                  Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          iconSize: 36,
-                          color: Colors.white,
-                          onPressed: () => _seekBy(-10),
-                          icon: const Icon(Icons.replay_10_rounded),
-                        ),
-                        const SizedBox(width: 16),
-                        IconButton(
-                          iconSize: 56,
-                          color: Colors.white,
-                          onPressed: _togglePlay,
-                          icon: Icon(playing ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded),
-                        ),
-                        const SizedBox(width: 16),
-                        IconButton(
-                          iconSize: 36,
-                          color: Colors.white,
-                          onPressed: () => _seekBy(10),
-                          icon: const Icon(Icons.forward_10_rounded),
-                        ),
-                      ],
-                    ),
+                  IconButton(
+                    iconSize: 54,
+                    onPressed: _togglePlay,
+                    icon: _state == 3
+                        ? const SizedBox(
+                            width: 32, height: 32, child: CircularProgressIndicator(strokeWidth: 3))
+                        : Icon(_playing
+                            ? Icons.pause_circle_filled_rounded
+                            : Icons.play_circle_fill_rounded),
                   ),
-                if (_flash != null)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(_flash!,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                    ),
+                  IconButton(
+                    iconSize: 32,
+                    onPressed: () => _seekBy(10),
+                    icon: const Icon(Icons.forward_10_rounded),
                   ),
-                if (_show)
-                  Positioned(
-                    left: 8,
-                    right: 8,
-                    bottom: 4,
-                    child: Row(
-                      children: [
-                        ValueListenableBuilder<Duration>(
-                          valueListenable: _pos,
-                          builder: (_, pos, __) => Text(_fmt(pos),
-                              style: const TextStyle(color: Colors.white, fontSize: 12)),
-                        ),
-                        Expanded(
-                          child: ValueListenableBuilder<Duration>(
-                            valueListenable: _pos,
-                            builder: (_, pos, __) {
-                              final ms = total.inMilliseconds;
-                              final v = ms <= 0 ? 0.0 : (pos.inMilliseconds / ms).clamp(0.0, 1.0);
-                              return Slider(
-                                value: v,
-                                onChanged: ms <= 0
-                                    ? null
-                                    : (x) => _pos.value = Duration(milliseconds: (ms * x).round()),
-                                onChangeEnd: ms <= 0
-                                    ? null
-                                    : (x) {
-                                        _yt.seekTo(seconds: ms * x / 1000.0, allowSeekAhead: true);
-                                        _scheduleHide();
-                                      },
-                              );
-                            },
-                          ),
-                        ),
-                        Text(_fmt(total),
-                            style: const TextStyle(color: Colors.white, fontSize: 12)),
-                        PopupMenuButton<double>(
-                          tooltip: 'Speed',
-                          initialValue: _speed,
-                          onSelected: (v) {
-                            setState(() => _speed = v);
-                            _yt.setPlaybackRate(v);
-                          },
-                          itemBuilder: (_) => [
-                            for (final v in const [0.5, 0.75, 1.0, 1.25, 1.5, 2.0])
-                              PopupMenuItem(value: v, child: Text('${v}x')),
-                          ],
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            child: Text('${_speed}x',
-                                style: const TextStyle(
-                                    color: Colors.white, fontWeight: FontWeight.w600)),
-                          ),
-                        ),
-                        IconButton(
-                          color: Colors.white,
-                          onPressed: () => _setFullscreen(!_full),
-                          icon: Icon(_full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          );
-        });
-      },
+                ],
+              ),
+              IconButton(
+                onPressed: () => _setFullscreen(!_full),
+                icon: Icon(_full ? Icons.fullscreen_exit_rounded : Icons.fullscreen_rounded),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final stage = AspectRatio(
-      aspectRatio: 16 / 9,
-      child: Stack(
-        children: [
-          // The YouTube page cannot be touched: only our controls react.
-          Positioned.fill(
-            child: IgnorePointer(
-              child: YoutubePlayer(controller: _yt, aspectRatio: 16 / 9),
-            ),
-          ),
-          Positioned.fill(child: _controls()),
-        ],
-      ),
-    );
-
+    final p = AppPalette.of(context);
     return PopScope(
       canPop: !_full,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _setFullscreen(false);
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
         body: GlassBackground(
-          child: Container(
-            color: _full ? Colors.black : null,
-            child: Column(
-              children: [
-                if (!_full)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-                    child: BackHeader(caption: widget.subtitle, title: widget.title),
-                  ),
-                // The key keeps the player alive when switching to fullscreen.
-                Expanded(
-                  key: const ValueKey('stage'),
-                  child: Align(
-                    alignment: _full ? Alignment.center : Alignment.topCenter,
-                    child: stage,
+          child: Column(
+            children: [
+              // Offstage keeps the page alive when the header is hidden in fullscreen.
+              Offstage(
+                offstage: _full,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                  child: BackHeader(caption: widget.subtitle, title: widget.title),
+                ),
+              ),
+              Flexible(
+                fit: FlexFit.loose,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  heightFactor: 1.0, // the controls sit right under the video
+                  child: AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: WebViewWidget(controller: _web),
                   ),
                 ),
-              ],
-            ),
+              ),
+              _controls(p),
+            ],
           ),
         ),
       ),
